@@ -1,0 +1,19 @@
+# Core
+setuptools>=64.0
+
+# Development
+pytest>=7.0
+pytest-cov>=4.0
+
+# Optional: for enhanced parsing
+# tree-sitter>=0.20.0
+
+# Optional: for embedding support
+# numpy>=1.24.0
+# sentence-transformers>=2.2.0
+
+# Optional: for YAML support
+# pyyaml>=6.0
+
+# Optional: for JSON schema validation
+# jsonschema>=4.0.0

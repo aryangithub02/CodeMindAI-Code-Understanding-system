@@ -1,0 +1,37 @@
+{
+  "analysis": {
+    "max_depth": 5,
+    "max_file_size_kb": 500,
+    "include_patterns": [
+      "*.py", "*.js", "*.ts", "*.tsx", "*.jsx",
+      "*.cs", "*.java", "*.go", "*.rs", "*.rb",
+      "*.php", "*.swift", "*.kt"
+    ],
+    "exclude_dirs": [
+      "__pycache__", "node_modules", ".git", ".venv",
+      "venv", "dist", "build", ".tox", ".egg-info",
+      "target", "bin", "obj"
+    ]
+  },
+  "output": {
+    "format": "markdown",
+    "report_type": "full",
+    "diagrams": true,
+    "verbose": false
+  },
+  "security": {
+    "enabled": true,
+    "severity_threshold": "medium"
+  },
+  "quality": {
+    "enabled": true,
+    "max_class_methods": 15,
+    "max_function_lines": 100
+  },
+  "parsers": {
+    "python": true,
+    "javascript": true,
+    "typescript": true,
+    "generic": true
+  }
+}

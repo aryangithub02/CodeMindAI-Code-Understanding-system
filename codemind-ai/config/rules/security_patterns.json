@@ -1,0 +1,44 @@
+{
+  "hardcoded_secrets": {
+    "severity": "Critical",
+    "patterns": [
+      "(?i)(?:password|passwd|secret|api.?key|api_key)\\s*[=:]\\s*['\"][^'\"]{8,}['\"]",
+      "(?i)(?:token|auth_token|access_token|secret_key)\\s*[=:]\\s*['\"][^'\"]{8,}['\"]",
+      "(?i)sk_live_|pk_live_|sk_test_|pk_test_",
+      "(?i)AKIA[0-9A-Z]{16}"
+    ]
+  },
+  "injection_risks": {
+    "severity": "High",
+    "patterns": [
+      "(?i)execute\\(.*\\+|execute\\(.*f['\"]",
+      "(?i)eval\\s*\\(|exec\\s*\\(",
+      "(?i)os\\.system\\(|subprocess\\.(?:call|Popen|run)\\(.*\\+",
+      "(?i)unsafe|mark_safe|dangerouslySetInnerHTML"
+    ]
+  },
+  "unsafe_deserialization": {
+    "severity": "Critical",
+    "patterns": [
+      "pickle\\.loads|pickle\\.load\\(",
+      "yaml\\.load\\(|yaml\\.loads\\(",
+      "eval\\(|eval\\s*\\("
+    ]
+  },
+  "auth_bypass": {
+    "severity": "Critical",
+    "patterns": [
+      "(?i)allow_any|permit_all|skip_auth|bypass_auth"
+    ]
+  },
+  "sensitive_files": {
+    "severity": "High",
+    "patterns": [
+      "\\.env",
+      "credentials\\.json",
+      "service-account\\.json",
+      "id_rsa",
+      "\\.pem"
+    ]
+  }
+}

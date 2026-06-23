@@ -1,0 +1,37 @@
+{
+  "layered": {
+    "indicators": ["controllers", "services", "repositories", "models"],
+    "min_score": 3,
+    "label": "Layered Architecture"
+  },
+  "clean_architecture": {
+    "indicators": ["domain", "application", "infrastructure", "interfaces", "usecases"],
+    "min_score": 4,
+    "label": "Clean Architecture"
+  },
+  "hexagonal": {
+    "indicators": ["ports", "adapters", "usecases", "drivers"],
+    "min_score": 3,
+    "label": "Hexagonal Architecture"
+  },
+  "mvc": {
+    "indicators": ["controllers", "views", "models", "templates"],
+    "min_score": 3,
+    "label": "MVC Architecture"
+  },
+  "event_driven": {
+    "indicators": ["kafka", "rabbitmq", "eventbus", "event_handler", "producer", "consumer"],
+    "min_score": 2,
+    "label": "Event-Driven Architecture"
+  },
+  "microservices": {
+    "indicators": ["api-gateway", "service-registry", "docker-compose", "kubernetes"],
+    "min_score": 2,
+    "label": "Microservices"
+  },
+  "serverless": {
+    "indicators": ["lambda", "handler", "serverless.yml", "function.json"],
+    "min_score": 2,
+    "label": "Serverless"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "large_class": {
+    "max_methods": 15,
+    "severity": "warning"
+  },
+  "god_function": {
+    "max_lines": 100,
+    "severity": "warning"
+  },
+  "duplicate_code": {
+    "min_block_lines": 5,
+    "min_occurrences": 2,
+    "severity": "info"
+  },
+  "circular_dependency": {
+    "severity": "error"
+  },
+  "todo_standards": {
+    "patterns": {
+      "TODO": "unimplemented feature",
+      "FIXME": "known bug",
+      "HACK": "workaround",
+      "XXX": "warning",
+      "WORKAROUND": "temporary fix"
+    }
+  }
+}

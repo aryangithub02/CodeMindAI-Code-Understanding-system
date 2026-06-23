@@ -1,0 +1,218 @@
+@import "tailwindcss";
+
+:root {
+  --color-background: #0F172A;
+  --color-card: #1E293B;
+  --color-primary: #2563EB;
+  --color-accent: #22C55E;
+  --color-danger: #EF4444;
+  --color-warning: #F59E0B;
+  --color-text: #F8FAFC;
+  --color-border: #1E293B;
+  --color-sidebar: rgba(15, 23, 42, 0.8);
+  --color-muted: #64748B;
+  --color-code-bg: #1A2035;
+}
+
+.light {
+  --color-background: #F8FAFC;
+  --color-card: #FFFFFF;
+  --color-primary: #2563EB;
+  --color-accent: #16A34A;
+  --color-danger: #DC2626;
+  --color-warning: #D97706;
+  --color-text: #0F172A;
+  --color-border: #E2E8F0;
+  --color-sidebar: rgba(248, 250, 252, 0.95);
+  --color-muted: #94A3B8;
+  --color-code-bg: #F1F5F9;
+}
+
+.dark {
+  --color-background: #0F172A;
+  --color-card: #1E293B;
+  --color-primary: #2563EB;
+  --color-accent: #22C55E;
+  --color-danger: #EF4444;
+  --color-warning: #F59E0B;
+  --color-text: #F8FAFC;
+  --color-border: #1E293B;
+  --color-sidebar: rgba(15, 23, 42, 0.8);
+  --color-muted: #64748B;
+  --color-code-bg: #1A2035;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-border) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--color-border);
+  border-radius: 3px;
+}
+
+*::-webkit-scrollbar-thumb:hover {
+  background-color: #334155;
+}
+
+body {
+  background-color: var(--color-background);
+  color: var(--color-text);
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+::selection {
+  background-color: #2563EB40;
+  color: var(--color-text);
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px rgba(37, 99, 235, 0.1);
+  }
+  50% {
+    box-shadow: 0 0 30px rgba(37, 99, 235, 0.2);
+  }
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.react-flow__node {
+  cursor: pointer;
+}
+
+.react-flow__edge-path {
+  stroke-width: 2;
+}
+
+.react-flow__minimap {
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid var(--color-border);
+}
+
+/* Light theme adjustments for React Flow */
+.light .react-flow__background {
+  background-color: #F8FAFC;
+}
+
+.light .react-flow__controls-button {
+  background: white;
+  border: 1px solid #E2E8F0;
+  color: #475569;
+}
+
+.light .react-flow__controls-button:hover {
+  background: #F1F5F9;
+}
+
+/* Light theme sidebar adjustments */
+.light .bg-slate-900\/80,
+.light .bg-slate-900\/50 {
+  background-color: rgba(248, 250, 252, 0.95);
+}
+
+.light .border-slate-800 {
+  border-color: #E2E8F0;
+}
+
+.light .text-slate-100,
+.light .text-slate-200,
+.light .text-slate-300 {
+  color: #1E293B;
+}
+
+.light .text-slate-400 {
+  color: #64748B;
+}
+
+.light .text-slate-500 {
+  color: #94A3B8;
+}
+
+.light .bg-slate-800,
+.light .bg-slate-800\/50,
+.light .bg-slate-800\/30 {
+  background-color: #F1F5F9;
+}
+
+.light .bg-slate-900\/50 {
+  background-color: #FAFAFA;
+}
+
+.light .hover\:bg-slate-800:hover,
+.light .hover\:bg-slate-800\/50:hover {
+  background-color: #E2E8F0;
+}
+
+.light .bg-\[#0F172A\] {
+  background-color: #F8FAFC;
+}
+
+.light .bg-\[#1A2035\] {
+  background-color: #F1F5F9;
+}
+
+.light .text-slate-600 {
+  color: #94A3B4;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--color-primary);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Skip to main content link for keyboard users */
+.skip-to-content {
+  position: absolute;
+  left: -9999px;
+  top: 0;
+  z-index: 999;
+  padding: 0.5rem 1rem;
+  background: var(--color-primary);
+  color: white;
+  text-decoration: none;
+}
+
+.skip-to-content:focus {
+  left: 0;
+}
+
+/* ─── Mermaid diagram theme transitions ──────────────────────────── */
+.mermaid svg {
+  transition: background-color 0.3s ease;
+}
+
+.mermaid .node rect,
+.mermaid .node circle,
+.mermaid .node polygon,
+.mermaid .cluster rect {
+  transition: fill 0.3s ease, stroke 0.3s ease;
+}
+
+.mermaid .edgePath .path,
+.mermaid .messageLine0,
+.mermaid .messageLine1 {
+  transition: stroke 0.3s ease;
+}
+
+.mermaid text,
+.mermaid .messageText,
+.mermaid .labelText,
+.mermaid .loopText {
+  transition: fill 0.3s ease;
+}

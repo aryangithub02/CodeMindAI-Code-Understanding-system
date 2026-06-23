@@ -1,0 +1,19 @@
+{
+  "analysis": {
+    "max_depth": 3,
+    "max_file_size_kb": 200
+  },
+  "security": {
+    "enabled": true,
+    "severity_threshold": "high"
+  },
+  "quality": {
+    "enabled": false
+  },
+  "output": {
+    "format": "markdown",
+    "report_type": "summary",
+    "diagrams": false,
+    "verbose": false
+  }
+}
