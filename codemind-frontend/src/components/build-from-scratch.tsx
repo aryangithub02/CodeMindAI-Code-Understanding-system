@@ -15,24 +15,17 @@ import {
   Layout,
   Workflow,
   FileType,
-  Split,
   Target,
-  Users,
   BookOpen,
-  Hammer,
   Lightbulb,
-  ChevronDown,
-  ChevronRight,
   Download,
   Send,
   X,
-  FileText,
   AlertTriangle,
   ExternalLink,
   Shield,
   Activity,
-  CheckCircle2,
-  ListTodo
+  CheckCircle2
 } from "lucide-react"
 
 interface BuildFromScratchProps {
@@ -198,7 +191,7 @@ You will need to create these to make the project fully enterprise-ready.`
       </div>
 
       {/* METRICS / STATS RIBBON */}
-      <div className="grid grid-cols-2 md:grid-cols-7 border-b border-slate-800 bg-slate-900/20 shrink-0 divide-x divide-slate-800/60">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 border-b border-slate-800 bg-slate-900/20 shrink-0">
         {[
           { label: "Project Type", value: blueprint.projectType, color: "text-blue-400" },
           { label: "Tech Stack", value: blueprint.techStack.slice(0, 3).join(" + "), color: "text-emerald-400" },
@@ -208,7 +201,7 @@ You will need to create these to make the project fully enterprise-ready.`
           { label: "Learning Time", value: blueprint.estimatedLearningTime, color: "text-orange-400" },
           { label: "Difficulty", value: blueprint.difficulty, color: "text-indigo-400" },
         ].map((s, idx) => (
-          <div key={idx} className="p-4 flex flex-col justify-center min-w-0">
+          <div key={idx} className="p-4 flex flex-col justify-center min-w-0 border-r border-b lg:border-b-0 border-slate-800/60 last:border-r-0">
             <span className="text-[10px] text-slate-500 uppercase tracking-wider font-semibold">{s.label}</span>
             <p className={cn("text-xs font-bold mt-1 truncate", s.color)} title={s.value}>{s.value}</p>
           </div>
@@ -286,7 +279,7 @@ You will need to create these to make the project fully enterprise-ready.`
                   </div>
 
                   {/* TIMELINE VISUAL GRAPH */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                     {visualTimeline.map((w, wIdx) => (
                       <div
                         key={w.week}
@@ -437,7 +430,7 @@ You will need to create these to make the project fully enterprise-ready.`
                               <CardContent className="space-y-4 text-xs">
                                 <div>
                                   <span className="text-slate-500 block mb-1.5 uppercase font-semibold">Entities / Collections</span>
-                                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
                                     {databaseDetails.collections.map((c, ci) => (
                                       <div key={ci} className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/60">
                                         <h5 className="font-bold text-slate-200">{c.name}</h5>
@@ -561,7 +554,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                         </div>
                                         <Badge variant="outline" className="text-[9px] text-slate-400 border-slate-700">{ep.authentication}</Badge>
                                       </div>
-                                      <div className="grid grid-cols-2 gap-4 text-[10px] font-mono">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-[10px] font-mono">
                                         <div>
                                           <span className="text-slate-500 block mb-1">Request:</span>
                                           <pre className="p-2 bg-slate-950 rounded text-slate-300 overflow-x-auto max-h-24">{ep.request}</pre>
@@ -603,7 +596,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                   {frontendDetails.pages.map((p, pi) => (
                                     <div key={pi} className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/80 space-y-2">
                                       <h5 className="font-bold text-slate-200">{p.name}</h5>
-                                      <div className="grid grid-cols-2 gap-4 text-xs text-slate-400">
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs text-slate-400">
                                         <div>
                                           <strong className="text-slate-300 block mb-1">State Managed:</strong>
                                           <span>{p.state}</span>
@@ -632,7 +625,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                 </CardTitle>
                               </CardHeader>
                               <CardContent className="space-y-4 text-xs">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                                   <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/60">
                                     <strong className="text-slate-200 block mb-1">Frontend → Backend Connection</strong>
                                     <p className="text-slate-400 leading-relaxed text-[11px]">{integrationDetails.frontendToBackend}</p>
@@ -642,7 +635,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                     <p className="text-slate-400 leading-relaxed text-[11px]">{integrationDetails.backendToDatabase}</p>
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                                <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 pt-2">
                                   <div className="p-3 rounded-xl bg-slate-900/50 border border-slate-800/60">
                                     <strong className="text-slate-200 block mb-1">Security & Authentication Flow</strong>
                                     <p className="text-slate-400 leading-relaxed text-[11px]">{integrationDetails.authFlow}</p>
@@ -692,7 +685,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                 </CardTitle>
                               </CardHeader>
                               <CardContent className="space-y-4 text-xs">
-                                <div className="grid grid-cols-2 gap-4">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                                   <div className="space-y-2">
                                     <strong className="text-slate-300 block mb-1">Unit Tests</strong>
                                     {testingDetails.unitTests.map((t, ti) => (
@@ -706,7 +699,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                     ))}
                                   </div>
                                 </div>
-                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                                   <div className="space-y-2">
                                     <strong className="text-slate-300 block mb-1">API Endpoint Tests</strong>
                                     {testingDetails.apiTests.map((t, ti) => (
@@ -750,7 +743,7 @@ You will need to create these to make the project fully enterprise-ready.`
                                   </pre>
                                 </div>
 
-                                <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
                                   <div>
                                     <span className="text-slate-500 block mb-1 uppercase font-semibold">CI/CD automation pipeline</span>
                                     <p className="text-slate-400 text-[11px] mt-0.5 leading-relaxed">{deploymentDetails.ciCd}</p>
@@ -879,7 +872,7 @@ You will need to create these to make the project fully enterprise-ready.`
                     <p className="text-sm text-slate-400">Core architectural concepts to learn before recreating each phase.</p>
                   </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                     {reconstructionPhases.map((phase) => {
                       if (!phase.learningAccelerator) return null
                       return (
@@ -891,11 +884,11 @@ You will need to create these to make the project fully enterprise-ready.`
                           <CardContent className="space-y-3 mt-1 text-xs">
                             {phase.learningAccelerator.concepts.map((concept, ci) => (
                               <div key={ci} className="p-2.5 rounded-lg bg-slate-900/60 border border-slate-800 space-y-1.5">
-                                <div className="flex items-center justify-between">
-                                  <span className="font-bold text-slate-200">{concept.name}</span>
-                                  <div className="flex items-center gap-1.5">
-                                    <Badge variant="outline" className="text-[9px] px-1 bg-slate-800 text-slate-350">{concept.time}</Badge>
-                                    <Badge variant="outline" className="text-[9px] px-1 border-slate-700 text-slate-400">{concept.difficulty}</Badge>
+                                <div className="flex items-start justify-between gap-3">
+                                  <span className="font-bold text-slate-200 flex-1 min-w-0 leading-tight">{concept.name}</span>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 bg-slate-800 text-slate-350 border-slate-700 shrink-0">{concept.time}</Badge>
+                                    <Badge variant="outline" className="text-[9px] px-1.5 py-0.5 border-slate-700 text-slate-400 shrink-0">{concept.difficulty}</Badge>
                                   </div>
                                 </div>
                                 <div className="flex flex-wrap gap-1.5 pt-1 items-center">

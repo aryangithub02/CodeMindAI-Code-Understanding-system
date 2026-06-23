@@ -590,7 +590,7 @@ export default function OnboardingPage() {
                             isActive={activePhase === i}
                             onSelect={() => setActivePhase(i === activePhase ? -1 : i)}
                             onToggleTask={(taskId, current) => {
-                              const next: TaskStatus = current === "not_started" ? "in_progress" : current === "in_progress" ? "completed" : "not_started"
+                              const next: TaskStatus = current === "completed" ? "not_started" : "completed"
                               setTaskStatus(taskId, next)
                               setTick(t => t + 1)
                             }}
@@ -611,8 +611,8 @@ export default function OnboardingPage() {
                             <CardDescription className="text-xs">Key modules ranked by dependency centrality</CardDescription>
                           </CardHeader>
                           <CardContent className="space-y-2">
-                            {plan.importantComponents.services.map(s => (
-                              <div key={s.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/30">
+                            {plan.importantComponents.services.map((s, idx) => (
+                              <div key={`${s.name}-${idx}`} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/30">
                                 <div>
                                   <p className="text-xs font-medium text-slate-200">{s.name}</p>
                                   <p className="text-[10px] text-slate-500">{s.description}</p>
@@ -677,8 +677,8 @@ export default function OnboardingPage() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-1">
-                            {plan.importantComponents.apis.map(a => (
-                              <div key={a.name} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/30">
+                            {plan.importantComponents.apis.map((a, idx) => (
+                              <div key={`${a.name}-${idx}`} className="flex items-center justify-between px-3 py-2 rounded-lg bg-slate-800/30">
                                 <div>
                                   <p className="text-xs font-medium text-slate-200">{a.name}</p>
                                   <p className="text-[10px] text-slate-500">{a.description}</p>
@@ -706,7 +706,7 @@ export default function OnboardingPage() {
                           </CardHeader>
                           <CardContent className="space-y-1">
                             {architecturePath.map((step, i) => (
-                              <div key={step.step} className="flex items-start gap-3 px-3 py-2">
+                              <div key={`${step.step}-${i}`} className="flex items-start gap-3 px-3 py-2">
                                 <div className="flex flex-col items-center">
                                   <div className={cn(
                                     "w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold border",
@@ -735,8 +735,8 @@ export default function OnboardingPage() {
                             </CardTitle>
                           </CardHeader>
                           <CardContent className="space-y-3">
-                            {importantFlows.map(f => (
-                              <details key={f.name} className="group">
+                            {importantFlows.map((f, idx) => (
+                              <details key={`${f.name}-${idx}`} className="group">
                                 <summary className="flex items-center gap-2 cursor-pointer text-xs font-medium text-slate-200 px-2 py-1.5 rounded-lg hover:bg-slate-800/30">
                                   <ArrowRight className="w-3 h-3 text-purple-400" />
                                   {f.name}
