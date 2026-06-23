@@ -279,7 +279,7 @@ You will need to create these to make the project fully enterprise-ready.`
                   </div>
 
                   {/* TIMELINE VISUAL GRAPH */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
                     {visualTimeline.map((w, wIdx) => (
                       <div
                         key={w.week}
@@ -293,7 +293,7 @@ You will need to create these to make the project fully enterprise-ready.`
                       >
                         <Card
                           className={cn(
-                            "border-slate-800 transition-all relative overflow-hidden group h-full",
+                            "border-slate-800 transition-all relative overflow-hidden group h-full p-4",
                             timelineHoverWeek === wIdx ? "border-blue-500/40 bg-blue-500/5 shadow-lg shadow-blue-500/5" : "bg-slate-900/20"
                           )}
                         >
@@ -306,7 +306,7 @@ You will need to create these to make the project fully enterprise-ready.`
                             {w.tasks.map((t, tIdx) => (
                               <div key={tIdx} className="flex items-start gap-2 text-xs text-slate-400 leading-relaxed">
                                 <CheckCircle2 className="w-3.5 h-3.5 text-blue-500/50 shrink-0 mt-0.5" />
-                                <span>{t}</span>
+                                <span className="break-words min-w-0 flex-1">{t}</span>
                               </div>
                             ))}
                           </CardContent>
@@ -923,7 +923,7 @@ You will need to create these to make the project fully enterprise-ready.`
   if (isFullScreen) {
     return (
       <div className="fixed inset-0 z-[100] bg-slate-950/80 backdrop-blur-sm p-4 md:p-6 overflow-y-auto flex items-center justify-center">
-        <div className="w-full max-w-6xl h-[85vh] rounded-2xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col bg-slate-950">
+        <div className="w-full max-w-7xl h-[85vh] rounded-2xl border border-slate-800 overflow-hidden shadow-2xl flex flex-col bg-slate-950">
           {mainLayout}
         </div>
       </div>
