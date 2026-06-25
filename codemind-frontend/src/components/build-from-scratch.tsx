@@ -271,48 +271,58 @@ You will need to create these to make the project fully enterprise-ready.`
               className="space-y-6"
             >
               {activeTab === "blueprint" && (
-                <div className="space-y-6">
+                <div className="space-y-8">
                   {/* Timeline Title */}
                   <div>
-                    <h2 className="text-lg font-bold text-slate-100">Project Reconstruction Timeline</h2>
-                    <p className="text-sm text-slate-400">Interactive Gantt roadmap indicating tasks mapping per development week.</p>
+                    <h2 className="text-3xl font-bold text-white tracking-tight">Project Reconstruction Timeline</h2>
+                    <p className="text-lg text-slate-400 mt-2">Interactive Gantt roadmap indicating tasks mapping per development week.</p>
                   </div>
 
                   {/* TIMELINE VISUAL GRAPH */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 2xl:grid-cols-4 gap-4">
-                    {visualTimeline.map((w, wIdx) => (
-                      <div
-                        key={w.week}
-                        className="cursor-pointer"
-                        onMouseEnter={() => setTimelineHoverWeek(wIdx)}
-                        onMouseLeave={() => setTimelineHoverWeek(null)}
-                        onClick={() => {
-                          setActiveTab("phases")
-                          setActivePhaseIndex(wIdx * 2)
-                        }}
-                      >
-                        <Card
-                          className={cn(
-                            "border-slate-800 transition-all relative overflow-hidden group h-full p-4",
-                            timelineHoverWeek === wIdx ? "border-blue-500/40 bg-blue-500/5 shadow-lg shadow-blue-500/5" : "bg-slate-900/20"
-                          )}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 2xl:grid-cols-4 gap-6">
+                    {visualTimeline.map((w, wIdx) => {
+                      const isActive = timelineHoverWeek === wIdx || (timelineHoverWeek === null && wIdx === 1);
+                      return (
+                        <div
+                          key={w.week}
+                          className="cursor-pointer h-full"
+                          onMouseEnter={() => setTimelineHoverWeek(wIdx)}
+                          onMouseLeave={() => setTimelineHoverWeek(null)}
+                          onClick={() => {
+                            setActiveTab("phases")
+                            setActivePhaseIndex(wIdx * 2)
+                          }}
                         >
-                          <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-600 to-indigo-600 transform scale-x-0 group-hover:scale-x-100 transition-transform origin-left duration-300" />
-                          <CardHeader className="pb-2">
-                            <span className="text-[10px] text-blue-400 font-mono font-bold uppercase">{w.week}</span>
-                            <CardTitle className="text-sm text-slate-100 mt-1">{w.title}</CardTitle>
-                          </CardHeader>
-                          <CardContent className="space-y-2">
-                            {w.tasks.map((t, tIdx) => (
-                              <div key={tIdx} className="flex items-start gap-2 text-xs text-slate-400 leading-relaxed">
-                                <CheckCircle2 className="w-3.5 h-3.5 text-blue-500/50 shrink-0 mt-0.5" />
-                                <span className="break-words min-w-0 flex-1">{t}</span>
-                              </div>
-                            ))}
-                          </CardContent>
-                        </Card>
-                      </div>
-                    ))}
+                          <div
+                            className={cn(
+                              "relative flex flex-col h-full rounded-[24px] overflow-hidden transition-all duration-300 p-6 xl:p-8",
+                              isActive
+                                ? "bg-[#090E17] border border-blue-600/50 shadow-[0_0_30px_rgba(37,99,235,0.1)]"
+                                : "bg-slate-900/40 border border-slate-800/60 hover:bg-slate-900/60 hover:border-slate-700/60"
+                            )}
+                          >
+                            {/* Top gradient border for active state */}
+                            {isActive && (
+                              <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-blue-400 to-indigo-600" />
+                            )}
+                            
+                            <div className="mb-6">
+                              <span className="text-xs xl:text-sm font-bold text-blue-500 uppercase tracking-widest whitespace-nowrap">{w.week}</span>
+                              <h3 className="text-xl xl:text-2xl font-bold text-white mt-3 leading-tight">{w.title}</h3>
+                            </div>
+                            
+                            <div className="space-y-4 xl:space-y-5 flex-1">
+                              {w.tasks.map((t, tIdx) => (
+                                <div key={tIdx} className="flex items-start gap-3">
+                                  <CheckCircle2 className={cn("w-4 h-4 xl:w-5 xl:h-5 shrink-0 mt-0.5", isActive ? "text-blue-500" : "text-blue-500/60")} />
+                                  <span className="text-slate-300 text-sm xl:text-base leading-snug">{t}</span>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      )
+                    })}
                   </div>
 
                   {/* TECH STACK CHIPS */}

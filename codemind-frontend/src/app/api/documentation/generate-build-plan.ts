@@ -1,7 +1,7 @@
 import type { BuildFromScratchPlan, BuildPhase, ArchitectureAnalysis, RepositoryTreeNode, BuildTeamEstimates } from "@/types"
 
 function detectMainTech(arch: ArchitectureAnalysis): string {
-  const fws = Object.keys(arch.frameworks)
+  const fws = Object.keys(arch.frameworks || {})
   if (fws.length > 0) return fws[0]
   return "Unknown"
 }
@@ -10,6 +10,7 @@ function detectMainLang(arch: ArchitectureAnalysis): string {
   const langs: string[] = []
   if (arch.moduleDetails) {
     for (const detail of Object.values(arch.moduleDetails)) {
+      if (!detail.files) continue
       for (const file of detail.files) {
         const ext = file.path.split(".").pop()
         if (ext === "ts" || ext === "tsx") { langs.push("TypeScript"); break }
@@ -24,8 +25,9 @@ function detectMainLang(arch: ArchitectureAnalysis): string {
     }
   }
   if (langs.length === 0) {
-    if (arch.frameworks["NestJS"] || arch.frameworks["Next.js"]) return "TypeScript"
-    if (arch.frameworks["FastAPI"]) return "Python"
+    const fws = arch.frameworks || {}
+    if (fws["NestJS"] || fws["Next.js"]) return "TypeScript"
+    if (fws["FastAPI"]) return "Python"
   }
   return langs[0] || "TypeScript"
 }
@@ -44,6 +46,7 @@ function baseEstimate(files: number, modules: number): { hours: string; solo: st
 function flattenTree(nodes: RepositoryTreeNode[]): string[] {
   const result: string[] = []
   function walk(items: RepositoryTreeNode[], prefix = "") {
+    if (!items) return
     for (const item of items) {
       const p = prefix ? `${prefix}/${item.name}` : item.name
       if (item.type === "file") result.push(p)
@@ -56,16 +59,32 @@ function flattenTree(nodes: RepositoryTreeNode[]): string[] {
 
 export function generateBuildPlan(
   repoName: string,
-  arch: ArchitectureAnalysis,
+  rawArch: ArchitectureAnalysis,
   tree: RepositoryTreeNode[]
 ): BuildFromScratchPlan {
+  // Deep sanitize arch to prevent undefined errors in all downstream helpers
+  const arch: ArchitectureAnalysis = {
+    ...rawArch,
+    modules: rawArch.modules || [],
+    frameworks: rawArch.frameworks || {},
+    databaseConnections: rawArch.databaseConnections || [],
+    externalAPIs: rawArch.externalAPIs || [],
+    layers: rawArch.layers || [],
+    entryPoints: rawArch.entryPoints || [],
+    metrics: rawArch.metrics || { totalFiles: 0, totalLines: 0, databaseTables: 0, apiEndpoints: 0 },
+    summary: rawArch.summary || "",
+    moduleDetails: rawArch.moduleDetails || {},
+    type: rawArch.type || "Unknown",
+    maintainabilityScore: rawArch.maintainabilityScore || 0,
+  }
+
   const tech = detectMainTech(arch)
   const lang = detectMainLang(arch)
-  const files = flattenTree(tree)
+  const files = flattenTree(tree || [])
   const est = baseEstimate(files.length, arch.modules.length)
   const dbConns = arch.databaseConnections
   const externalApis = arch.externalAPIs
-  const hasFrontend = arch.modules.some((m) => m.type === "frontend") || repoName.toLowerCase().includes("frontend") || repoName.toLowerCase().includes("client")
+  const hasFrontend = arch.modules.some((m) => m.type === "frontend") || (repoName && (repoName.toLowerCase().includes("frontend") || repoName.toLowerCase().includes("client")))
   const hasAuth = arch.modules.some((m) => /auth/i.test(m.name))
   const isMl = /ml|model|train|predict/i.test(arch.summary) || arch.modules.some((m) => /ml|model|train/i.test(m.name))
 
