@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { after } from "next/server"
+import JSZip from "jszip"
 import { repositories, fileTrees, fileContents, analyses, onboardingPlans, saveCache } from "../../data"
 import type { RepositoryTreeNode } from "@/types"
 
@@ -11,7 +12,7 @@ const GITHUB_HEADERS: Record<string, string> = {
   ...(GITHUB_TOKEN ? { Authorization: `Bearer ${GITHUB_TOKEN}` } : {}),
 }
 
-const EXCLUDED_DIRS = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "env", ".next", "dist", "build", ".gitHub", ".vscode", "vendor", ".idea", "target", ".tox", ".eggs", "egg-info", ".mypy_cache", ".pytest_cache", ".yarn", ".yarn-cache", "bower_components", "elm-stuff", ".stack-work", ".gradle"])
+const EXCLUDED_DIRS = new Set(["node_modules", ".git", "__pycache__", ".venv", "venv", "env", ".next", "dist", "build", ".github", ".vscode", "vendor", ".idea", "target", ".tox", ".eggs", "egg-info", ".mypy_cache", ".pytest_cache", ".yarn", ".yarn-cache", "bower_components", "elm-stuff", ".stack-work", ".gradle"])
 const EXCLUDED_FILES = new Set(["package-lock.json", "yarn.lock", ".DS_Store", "Thumbs.db", "*.pyc"])
 
 interface GitHubTreeItem {
@@ -57,77 +58,52 @@ function shouldExclude(path: string, type: "blob" | "tree"): boolean {
   return false
 }
 
-function buildTree(githubTree: GitHubTreeItem[]): RepositoryTreeNode[] {
+function buildTreeFromPaths(paths: string[]): RepositoryTreeNode[] {
   const root: RepositoryTreeNode[] = []
-  const dirMap = new Map<string, RepositoryTreeNode>()
-
-  const sorted = [...githubTree].filter(t => !shouldExclude(t.path, t.type)).sort((a, b) => a.path.localeCompare(b.path))
-
-  for (const item of sorted) {
-    const parts = item.path.split("/")
-    const name = parts[parts.length - 1]
-
-    if (item.type === "tree") {
-      const node: RepositoryTreeNode = { name, type: "directory", path: item.path, children: [] }
-      dirMap.set(item.path, node)
-    } else {
-      const node: RepositoryTreeNode = { name, type: "file", path: item.path }
-      if (parts.length === 1) {
-        root.push(node)
-      }
+  
+  function getOrCreateDir(nodes: RepositoryTreeNode[], name: string, fullPath: string): RepositoryTreeNode {
+    let dir = nodes.find(n => n.name === name && n.type === "directory")
+    if (!dir) {
+      dir = { name, type: "directory", path: fullPath, children: [] }
+      nodes.push(dir)
     }
+    return dir
   }
-
-  for (const item of sorted) {
-    const parts = item.path.split("/")
-    if (parts.length <= 1) {
-      if (item.type === "tree") {
-        const node = dirMap.get(item.path)
-        if (node) root.push(node)
-      }
-      continue
-    }
-    const parentPath = parts.slice(0, -1).join("/")
-    const parent = dirMap.get(parentPath)
-    if (parent && parent.children) {
-      if (item.type === "tree") {
-        const node = dirMap.get(item.path)
-        if (node) parent.children.push(node)
+  
+  for (const p of paths) {
+    const parts = p.split("/")
+    let currentLevel = root
+    let accumulatedPath = ""
+    
+    for (let i = 0; i < parts.length; i++) {
+      const part = parts[i]
+      accumulatedPath = accumulatedPath ? `${accumulatedPath}/${part}` : part
+      
+      if (i === parts.length - 1) {
+        currentLevel.push({ name: part, type: "file", path: p })
       } else {
-        parent.children.push({ name: parts[parts.length - 1], type: "file", path: item.path })
+        const dir = getOrCreateDir(currentLevel, part, accumulatedPath)
+        currentLevel = dir.children!
       }
     }
   }
-
-  return root
-}
-
-async function fetchRepo(defaultBranch: string, owner: string, repo: string): Promise<{ tree: GitHubTreeItem[]; defaultBranch: string } | null> {
-  try {
-    const res = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}?recursive=1`, { headers: GITHUB_HEADERS })
-    if (res.status === 403) {
-      // Rate limited — try without recursive
-      const retryRes = await fetch(`https://api.github.com/repos/${owner}/${repo}/git/trees/${defaultBranch}`, { headers: GITHUB_HEADERS })
-      if (!retryRes.ok) return null
-      const data = await retryRes.json()
-      return { tree: data.tree || [], defaultBranch }
+  
+  function sortNodes(nodes: RepositoryTreeNode[]) {
+    nodes.sort((a, b) => {
+      if (a.type !== b.type) {
+        return a.type === "directory" ? -1 : 1
+      }
+      return a.name.localeCompare(b.name)
+    })
+    for (const node of nodes) {
+      if (node.children) {
+        sortNodes(node.children)
+      }
     }
-    if (!res.ok) return null
-    const data = await res.json()
-    return { tree: data.tree || [], defaultBranch }
-  } catch {
-    return null
   }
-}
-
-async function fetchFileContent(owner: string, repo: string, branch: string, path: string): Promise<string | null> {
-  try {
-    const res = await fetch(`https://raw.githubusercontent.com/${owner}/${repo}/${branch}/${path}`)
-    if (!res.ok) return null
-    return await res.text()
-  } catch {
-    return null
-  }
+  
+  sortNodes(root)
+  return root
 }
 
 async function detectMainLanguage(owner: string, repo: string): Promise<string> {
@@ -180,40 +156,67 @@ export async function POST(req: Request) {
     // Fetch repo data synchronously to avoid Vercel killing background tasks
     await (async () => {
       try {
-        // Get default branch
-        const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: GITHUB_HEADERS })
-        if (!repoRes.ok) {
-          const repo = repositories.find(r => r.id === repoId)
-          if (repo) { repo.status = "error"; repo.updatedAt = new Date().toISOString(); saveCache() }
-          return
+        // Try getting default branch from API, fallback to main then master
+        let defaultBranch = "main"
+        try {
+          const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: GITHUB_HEADERS })
+          if (repoRes.ok) {
+            const repoData = await repoRes.json()
+            defaultBranch = repoData.default_branch || "main"
+          }
+        } catch (e) {
+          console.warn("Failed to fetch repo metadata from API, using defaults:", e)
         }
-        const repoData = await repoRes.json()
-        const defaultBranch = repoData.default_branch || "main"
 
         const foundRepo = repositories.find(r => r.id === repoId)
         if (foundRepo) { foundRepo.status = "scanning"; foundRepo.updatedAt = new Date().toISOString(); saveCache() }
 
-        // Detect main language
+        // Detect main language (non-blocking API check)
         const mainLanguage = await detectMainLanguage(owner, repo)
 
-        // Fetch file tree
-        const result = await fetchRepo(defaultBranch, owner, repo)
-        if (!result || !result.tree) {
-          const repo = repositories.find(r => r.id === repoId)
-          if (repo) { repo.status = "error"; repo.updatedAt = new Date().toISOString(); saveCache() }
-          return
+        // Fetch zip archive of the repository
+        let zipRes = await fetch(`https://github.com/${owner}/${repo}/archive/refs/heads/${defaultBranch}.zip`)
+        if (!zipRes.ok && defaultBranch === "main") {
+          // Retry with master
+          zipRes = await fetch(`https://github.com/${owner}/${repo}/archive/refs/heads/master.zip`)
+          if (zipRes.ok) {
+            defaultBranch = "master"
+          }
         }
 
-        const { tree } = result
+        if (!zipRes.ok) {
+          throw new Error(`Failed to download repository zip from branch ${defaultBranch} or master (status ${zipRes.status})`)
+        }
 
         if (foundRepo) { foundRepo.status = "parsing"; foundRepo.updatedAt = new Date().toISOString(); saveCache() }
 
-        // Build tree structure
-        const treeNodes = buildTree(tree)
-        const fileItems = tree.filter(t => t.type === "blob" && !shouldExclude(t.path, "blob"))
+        // Load ZIP archive buffer using JSZip
+        const zipBuffer = await zipRes.arrayBuffer()
+        const zip = await JSZip.loadAsync(zipBuffer)
 
-        // Fetch file contents (first 50 files to avoid overwhelming)
-        const MAX_FILES = 50
+        const fileItems: { path: string; size: number }[] = []
+
+        // Find the root folder name in ZIP generated by GitHub (usually owner-repo-sha or repo-branch)
+        const zipKeys = Object.keys(zip.files)
+        const rootFolder = zipKeys.length > 0 ? zipKeys[0].split("/")[0] : ""
+
+        zip.forEach((relativePath, file) => {
+          if (file.dir) return
+          const pathParts = relativePath.split("/")
+          if (pathParts.length <= 1) return // Skip root-level files outside the main root folder
+          const cleanPath = pathParts.slice(1).join("/")
+
+          if (!cleanPath) return
+          if (shouldExclude(cleanPath, "blob")) return
+
+          fileItems.push({ path: cleanPath, size: (file as any)._data?.uncompressedSize || 0 })
+        })
+
+        // Build tree structure
+        const treeNodes = buildTreeFromPaths(fileItems.map(f => f.path))
+
+        // Fetch file contents (first 100 files to avoid overwhelming memory/quota)
+        const MAX_FILES = 100
         const contentsToFetch = fileItems.slice(0, MAX_FILES)
         const fetchedContents: Record<string, string> = {}
 
@@ -221,14 +224,17 @@ export async function POST(req: Request) {
         const extCount = new Map<string, number>()
 
         for (const item of contentsToFetch) {
-          const content = await fetchFileContent(owner, repo, defaultBranch, item.path)
-          if (content !== null) {
+          const zipPath = rootFolder ? `${rootFolder}/${item.path}` : item.path
+          const file = zip.files[zipPath]
+          if (file) {
+            const content = await file.async("string")
             fetchedContents[item.path] = content
             const lines = content.split("\n").length
             totalLines += lines
+
+            const ext = item.path.includes(".") ? "." + item.path.split(".").pop()!.toLowerCase() : ""
+            if (ext) extCount.set(ext, (extCount.get(ext) || 0) + 1)
           }
-          const ext = item.path.includes(".") ? "." + item.path.split(".").pop()!.toLowerCase() : ""
-          if (ext) extCount.set(ext, (extCount.get(ext) || 0) + 1)
         }
 
         // Detect language from extensions
@@ -373,7 +379,7 @@ export async function POST(req: Request) {
               architecture: `# System Architecture\n\n## Architecture Pattern\n**Layered Architecture** — Default detection for ${repoName}.\n\n## Detected Technologies\n- **Language:** ${detectedLanguage}\n- **File Extensions:** ${extList}\n\n## Modules\n\n${moduleList || "- No modules detected"}\n\n## Architecture Diagram\n\n${archMermaid || "No architecture diagram available."}\n\n## Module Details\n\n${moduleDetails || "- No module details available"}\n\n## Entry Points\n- No explicit entry points detected\n\n## Dependencies Between Modules\n- ${archEdges.length > 0 ? archEdges.length + " dependency relationships mapped" : "No dependencies mapped"}`,
               api: `# API Endpoints\n\n## Detected API Files\n\n${apiEndpoints}\n\n## Notes\n- No structured API documentation available\n- Run a full analysis to detect:\n  - Route definitions\n  - Request/response schemas\n  - Authentication requirements\n  - Error codes\n\n## How to Add API Documentation\nOnce API routes are detected, this section will include:\n- Endpoint URLs\n- HTTP methods\n- Request parameters\n- Response schemas\n- Authentication details`,
               services: `# Services & Modules\n\n## Discovered Modules\n\n${moduleList || "- No modules detected"}\n\n## Module Responsibilities\n\n${moduleDetails || "- No module details available"}\n\n## Key Files\n\n${fileList || "- No files listed"}`,
-              database: `# Database Schema\n\n## Detected Database Files\n\n${dbContent}\n\n## Schema Overview\n${dbFiles.length > 0 ? "The following database-related files were detected. Run a full analysis to extract schemas, relationships, and indexes." : "No database schema files detected in this repository."}\n\n## Tables / Collections\n- Run full analysis to detect database tables`,
+              database: `# Database Schema\n\n## Detected Database Files\n\n${dbContent}\n\n## Schema Overview\n${dbFiles.length > 0 ? "The following database-related files were detected. Run a full analysis to extract schemas, relationships, indexes, and migrations." : "No database schema files detected in this repository."}\n\n## Tables / Collections\n- Run full analysis to detect database tables`,
               dependencies: `# Dependencies\n\n## Module Dependency Graph\n\n${archMermaid || "No dependency graph available."}\n\n## Dependency Relationships\n${archEdges.length > 0 ? archEdges.map(e => `- **${archNodes.find(n => n.id === e.source)?.label || e.source}** → **${archNodes.find(n => n.id === e.target)?.label || e.target}** (${e.relation})`).join("\n") : "- No dependency relationships mapped"}\n\n## External Dependencies\n- Run full analysis to detect external packages`,
               dataflow: `# Data Flow\n\n## Flow Diagram\n\n${flowMermaid}\n\n## Request/Response Flow\n${archModules.length > 0 ? `1. Request enters through entry point\n2. Routes to ${archModules.map(m => m.name).join(" → ") || "handler"}\n3. Response returned` : "- No data flow mapped"}\n\n## Data Flow Paths\n- Run full analysis to map detailed data flows`,
               setup: `# Setup & Installation\n\n## Prerequisites\n- ${detectedLanguage} runtime environment\n\n## Detected Configuration Files\n${setupContent}\n\n## Quick Start\n1. Clone the repository\n2. Install dependencies (see configuration files above)\n3. Configure environment variables if needed\n4. Run the application\n\n## Environment Variables\n- No environment variables documented`,
