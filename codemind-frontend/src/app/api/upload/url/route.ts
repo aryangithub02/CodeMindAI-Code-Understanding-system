@@ -3,6 +3,7 @@ import { after } from "next/server"
 import JSZip from "jszip"
 import { repositories, fileTrees, fileContents, analyses, onboardingPlans, saveCache } from "../../data"
 import type { RepositoryTreeNode } from "@/types"
+import { analyzeArchitecture } from "../../architecture/architecture-analyzer"
 
 export const maxDuration = 60;
 
@@ -243,13 +244,17 @@ export async function POST(req: Request) {
 
         if (foundRepo) { foundRepo.status = "graph_building"; foundRepo.updatedAt = new Date().toISOString(); saveCache() }
 
+        // Run real static architecture analysis
+        const realAnalysis = await analyzeArchitecture(treeNodes, fetchedContents, repoName)
+
         // Update repo metadata
         if (foundRepo) {
           foundRepo.language = detectedLanguage
           foundRepo.totalFiles = fileItems.length
           foundRepo.totalLines = totalLines
-          foundRepo.totalClasses = 0
-          foundRepo.totalFunctions = 0
+          foundRepo.totalClasses = realAnalysis.metrics.totalClasses || 0
+          foundRepo.totalFunctions = realAnalysis.metrics.totalFunctions || 0
+          foundRepo.framework = Object.keys(realAnalysis.frameworks)[0] || ""
           foundRepo.updatedAt = new Date().toISOString()
         }
 
@@ -268,70 +273,34 @@ export async function POST(req: Request) {
           contentsToFetch
             .map(f => f.path.includes("/") ? f.path.substring(0, f.path.lastIndexOf("/")) : "root")
         )].sort()
+        
         const graphNodes: { id: string; label: string; type: "file" | "class" | "function" | "module"; filePath?: string }[] = []
         const graphEdges: { source: string; target: string; relation: string }[] = []
-        const archNodes: { id: string; label: string; type: "module" | "frontend" | "api" | "service" | "repository" | "model" | "database" | "external" | "entry" | "framework" | "layer" | "controller" | "other"; fileCount: number; complexity: "Low" | "Medium" | "High" | "Critical" }[] = []
-        const archEdges: { source: string; target: string; relation: string }[] = []
-        const archModules: { name: string; type: string; files: number }[] = []
-
-        for (const dir of dirs) {
-          const moduleName = dir === "root" ? repoName : dir.split("/").pop() || dir
-          const label = moduleName.replace(/[-_]/g, " ").replace(/\b\w/g, c => c.toUpperCase())
-          const id = moduleName.toLowerCase().replace(/[^a-z0-9]/g, "-")
-          graphNodes.push({ id, label, type: "module" })
-          archNodes.push({ id, label, type: "module", fileCount: 1, complexity: "Medium" })
-          archModules.push({ name: label, type: "module", files: 1 })
+        
+        for (const node of realAnalysis.nodes) {
+          graphNodes.push({
+            id: node.id,
+            label: node.label,
+            type: node.type === "entry" ? "file" : "module",
+          })
         }
-        for (let i = 1; i < dirs.length; i++) {
-          const srcId = dirs[i - 1] === "root" ? repoName.toLowerCase().replace(/[^a-z0-9]/g, "-") : dirs[i - 1].split("/").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "-")
-          const tgtId = dirs[i] === "root" ? repoName.toLowerCase().replace(/[^a-z0-9]/g, "-") : dirs[i].split("/").pop()!.toLowerCase().replace(/[^a-z0-9]/g, "-")
-          if (srcId !== tgtId) {
-            graphEdges.push({ source: srcId, target: tgtId, relation: "depends_on" })
-            archEdges.push({ source: srcId, target: tgtId, relation: "DEPENDS_ON" })
-          }
+        for (const edge of realAnalysis.edges) {
+          graphEdges.push({
+            source: edge.source,
+            target: edge.target,
+            relation: edge.relation.toLowerCase(),
+          })
         }
 
         analyses[repoId] = {
           repository: foundRepo || newRepo,
-          architecture: {
-            type: "Layered",
-            typeScore: 70,
-            typeConfidence: "Medium",
-            modules: archModules.length > 0 ? archModules : [{ name: "src", type: "module", files: fileItems.length }],
-            entryPoints: [],
-            frameworks: extensions.length > 0 ? Object.fromEntries(extensions.slice(0, 5).map(e => [e, "*"])) : {},
-            layers: [{ name: "Source Files", description: detectedLanguage }],
-            databaseConnections: [],
-            externalAPIs: [],
-            complexity: { level: "Medium", score: 40 },
-            maintainabilityScore: 65,
-            nodes: archNodes.length > 0 ? archNodes : [
-              { id: "root", label: repoName, type: "module", fileCount: fileItems.length, complexity: "Medium" }
-            ],
-            edges: archEdges,
-            metrics: {
-              totalFiles: fileItems.length, totalLines: totalLines, totalClasses: 0, totalFunctions: 0,
-              services: 0, controllers: 0, apis: 0, databaseTables: 0,
-              externalIntegrations: 0, testFiles: 0, configFiles: 0, docFiles: 0, avgFileSize: Math.round(totalLines / Math.max(fileItems.length, 1))
-            },
-            insights: [{ type: "recommendation", title: "Run Full Analysis", description: "Visit the Architecture page for a complete analysis." }],
-            summary: `${repoName} — ${fileItems.length} files, ${totalLines} lines, ${detectedLanguage}`,
-            criticalDependencies: 0,
-            circularDependencies: 0,
-            healthScore: 65,
-            criticalModulesCount: 0,
-            highRiskAreasCount: 0,
-            couplingScore: "Low",
-            scalabilityScore: "Low",
-            technicalDebtScore: "Low",
-            confidence: "Medium"
-          },
+          architecture: realAnalysis,
           dependencies: {
             graph: { nodes: graphNodes, edges: graphEdges },
             hotspots: [],
             circularDependencies: [],
-            externalDependencies: [],
-            summary: { filesWithImports: 0, totalImportStatements: 0, uniqueExternalDependencies: 0 },
+            externalDependencies: realAnalysis.externalAPIs,
+            summary: { filesWithImports: 0, totalImportStatements: 0, uniqueExternalDependencies: realAnalysis.externalAPIs.length },
           },
           dataFlow: {
             routes: [],
@@ -341,14 +310,33 @@ export async function POST(req: Request) {
             architectureDiagram: `graph TD\n  A[${repoName}] --> B[${detectedLanguage}]`,
           },
           documentation: (() => {
-            const moduleNames = archModules.map(m => m.name)
-            const moduleDeps = archEdges.map(e => `  ${archNodes.find(n => n.id === e.source)?.label || e.source} --> ${archNodes.find(n => n.id === e.target)?.label || e.target}`).join("\n")
+            const moduleNames = realAnalysis.modules.map(m => m.name)
+            const moduleDeps = realAnalysis.edges.map(e => `  ${realAnalysis.nodes.find(n => n.id === e.source)?.label || e.source} --> ${realAnalysis.nodes.find(n => n.id === e.target)?.label || e.target}`).join("\n")
             const archMermaid = moduleDeps ? `\`\`\`mermaid\ngraph TD\n${moduleDeps}\n\`\`\`` : ""
-            const flowMermaid = `\`\`\`mermaid\nflowchart LR\n  A[${repoName}] --> B[${detectedLanguage}]\n  B --> C[${fileItems.length} files]\n${archModules.slice(0, 5).map(m => `  B --> ${m.name.replace(/\s+/g, "_")}[${m.name}]`).join("\n")}\n\`\`\``
+            const flowMermaid = `\`\`\`mermaid\nflowchart LR\n  A[${repoName}] --> B[${detectedLanguage}]\n  B --> C[${fileItems.length} files]\n${realAnalysis.modules.slice(0, 5).map(m => `  B --> ${m.name.replace(/\s+/g, "_")}[${m.name}]`).join("\n")}\n\`\`\``
             const extList = extensions.length > 0 ? extensions.map(e => `- \`.${e}\``).join("\n") : "- None detected"
             const fileList = contentsToFetch.slice(0, 20).map(f => `- \`${f.path}\``).join("\n")
             const moduleList = moduleNames.map(m => `- **${m}**`).join("\n")
-            const moduleDetails = archModules.map(m => `### ${m.name}\n\n**Files:** ${m.files}\n**Complexity:** Medium\n**Type:** Module`).join("\n\n")
+            
+            const moduleDetailsMarkdown = Object.values(realAnalysis.moduleDetails || {})
+              .map(m => {
+                const fileListStr = m.files.slice(0, 5).map(f => `  - \`${f.name}\` (${f.loc} LOC) — *${f.purpose}*`).join("\n")
+                const depsStr = m.dependsOn.length > 0 ? m.dependsOn.map(d => d.name).join(", ") : "None"
+                const usedByStr = m.usedBy.length > 0 ? m.usedBy.map(u => u.name).join(", ") : "None"
+                
+                return `### ${m.name} (${m.type.toUpperCase()})
+- **Purpose:** ${m.purpose}
+- **Role/Domain:** ${m.businessRole}
+- **Complexity:** ${m.complexity} | **Risk Level:** ${m.riskLevel}
+- **Size:** ${m.fileCount} file(s) (${m.totalLoc} lines of code)
+- **Dependencies:**
+  - *Depends on:* ${depsStr}
+  - *Used by:* ${usedByStr}
+- **Files in Module:**
+${fileListStr || "  - No files listed"}
+- **AI Explanation:** ${m.aiExplanation}`
+              })
+              .join("\n\n")
 
             // Detect API-like file patterns
             const apiFiles = contentsToFetch.filter(f => /controller|route|api|handler|endpoint/i.test(f.path))
@@ -376,15 +364,15 @@ export async function POST(req: Request) {
 
             return {
               overview: `# Repository Overview\n\n**${repoName}**\n\n${url ? `Repository fetched from ${url}.` : ""}\n\n## Technology Stack\n- **Primary Language:** ${detectedLanguage}\n- **File Types:** ${extensions.length > 0 ? extensions.join(", ") : "Standard"}\n- **Total Files:** ${fileItems.length}\n- **Total Lines of Code:** ${totalLines}\n\n## Repository Statistics\n| Metric | Value |\n|--------|-------|\n| Total Files | ${fileItems.length} |\n| Total Lines | ${totalLines.toLocaleString()} |\n| Primary Language | ${detectedLanguage} |\n| File Extensions | ${extensions.length > 0 ? extensions.slice(0, 8).join(", ") : "Standard"} |\n\n## Key Directories\n${dirs.slice(0, 10).map(d => `- \`${d}\``).join("\n")}`,
-              architecture: `# System Architecture\n\n## Architecture Pattern\n**Layered Architecture** — Default detection for ${repoName}.\n\n## Detected Technologies\n- **Language:** ${detectedLanguage}\n- **File Extensions:** ${extList}\n\n## Modules\n\n${moduleList || "- No modules detected"}\n\n## Architecture Diagram\n\n${archMermaid || "No architecture diagram available."}\n\n## Module Details\n\n${moduleDetails || "- No module details available"}\n\n## Entry Points\n- No explicit entry points detected\n\n## Dependencies Between Modules\n- ${archEdges.length > 0 ? archEdges.length + " dependency relationships mapped" : "No dependencies mapped"}`,
+              architecture: `# System Architecture\n\n## Architecture Pattern\n**${realAnalysis.type} Architecture** — Default detection for ${repoName}.\n\n## Detected Technologies\n- **Language:** ${detectedLanguage}\n- **File Extensions:** ${extList}\n\n## Modules\n\n${moduleList || "- No modules detected"}\n\n## Architecture Diagram\n\n${archMermaid || "No architecture diagram available."}\n\n## Module Details\n\n${moduleDetailsMarkdown || "- No module details available"}\n\n## Entry Points\n- ${realAnalysis.entryPoints.map(e => `- \`${e}\``).join("\n") || "No explicit entry points detected"}\n\n## Dependencies Between Modules\n- ${realAnalysis.edges.length > 0 ? realAnalysis.edges.length + " dependency relationships mapped" : "No dependencies mapped"}`,
               api: `# API Endpoints\n\n## Detected API Files\n\n${apiEndpoints}\n\n## Notes\n- No structured API documentation available\n- Run a full analysis to detect:\n  - Route definitions\n  - Request/response schemas\n  - Authentication requirements\n  - Error codes\n\n## How to Add API Documentation\nOnce API routes are detected, this section will include:\n- Endpoint URLs\n- HTTP methods\n- Request parameters\n- Response schemas\n- Authentication details`,
-              services: `# Services & Modules\n\n## Discovered Modules\n\n${moduleList || "- No modules detected"}\n\n## Module Responsibilities\n\n${moduleDetails || "- No module details available"}\n\n## Key Files\n\n${fileList || "- No files listed"}`,
+              services: `# Services & Modules\n\n## Discovered Modules\n\n${moduleList || "- No modules detected"}\n\n## Module Responsibilities\n\n${moduleDetailsMarkdown || "- No module details available"}\n\n## Key Files\n\n${fileList || "- No files listed"}`,
               database: `# Database Schema\n\n## Detected Database Files\n\n${dbContent}\n\n## Schema Overview\n${dbFiles.length > 0 ? "The following database-related files were detected. Run a full analysis to extract schemas, relationships, indexes, and migrations." : "No database schema files detected in this repository."}\n\n## Tables / Collections\n- Run full analysis to detect database tables`,
-              dependencies: `# Dependencies\n\n## Module Dependency Graph\n\n${archMermaid || "No dependency graph available."}\n\n## Dependency Relationships\n${archEdges.length > 0 ? archEdges.map(e => `- **${archNodes.find(n => n.id === e.source)?.label || e.source}** → **${archNodes.find(n => n.id === e.target)?.label || e.target}** (${e.relation})`).join("\n") : "- No dependency relationships mapped"}\n\n## External Dependencies\n- Run full analysis to detect external packages`,
-              dataflow: `# Data Flow\n\n## Flow Diagram\n\n${flowMermaid}\n\n## Request/Response Flow\n${archModules.length > 0 ? `1. Request enters through entry point\n2. Routes to ${archModules.map(m => m.name).join(" → ") || "handler"}\n3. Response returned` : "- No data flow mapped"}\n\n## Data Flow Paths\n- Run full analysis to map detailed data flows`,
+              dependencies: `# Dependencies\n\n## Module Dependency Graph\n\n${archMermaid || "No dependency graph available."}\n\n## Dependency Relationships\n${realAnalysis.edges.length > 0 ? realAnalysis.edges.map(e => `- **${realAnalysis.nodes.find(n => n.id === e.source)?.label || e.source}** → **${realAnalysis.nodes.find(n => n.id === e.target)?.label || e.target}** (${e.relation})`).join("\n") : "- No dependency relationships mapped"}\n\n## External Dependencies\n- Run full analysis to detect external packages`,
+              dataflow: `# Data Flow\n\n## Flow Diagram\n\n${flowMermaid}\n\n## Request/Response Flow\n${realAnalysis.modules.length > 0 ? `1. Request enters through entry point\n2. Routes to ${realAnalysis.modules.map(m => m.name).join(" → ") || "handler"}\n3. Response returned` : "- No data flow mapped"}\n\n## Data Flow Paths\n- Run full analysis to map detailed data flows`,
               setup: `# Setup & Installation\n\n## Prerequisites\n- ${detectedLanguage} runtime environment\n\n## Detected Configuration Files\n${setupContent}\n\n## Quick Start\n1. Clone the repository\n2. Install dependencies (see configuration files above)\n3. Configure environment variables if needed\n4. Run the application\n\n## Environment Variables\n- No environment variables documented`,
               deployment: `# Deployment\n\n## Detected Deployment Files\n${deployContent}\n\n## Deployment Options\n${deployFiles.length > 0 ? "- Docker deployment available\n- CI/CD pipeline detected" : "- No deployment configuration detected\n- Standard deployment via cloning and running the application"}\n\n## Production Considerations\n- Add monitoring and logging\n- Configure environment variables for production`,
-              ai_guide: `# AI Repository Guide\n\n## Summary\n**${repoName}** is a ${detectedLanguage} repository with ${fileItems.length} files and ${totalLines.toLocaleString()} lines of code.\n\n## Technology Stack\n- **Language:** ${detectedLanguage}\n- **Modules:** ${moduleNames.length > 0 ? moduleNames.join(", ") : "Not detected"}\n- **File Types:** ${extensions.join(", ")}\n\n## Repository Structure\n${dirs.slice(0, 8).map(d => `- \`${d}/\``).join("\n")}\n\n## How to Get Started\n1. Clone the repository\n2. Review the setup instructions above\n3. Explore the key directories listed above\n4. Run the application locally\n\n## AI Insights\n- **Complexity:** Medium\n- **Maintainability Score:** 65/100\n- **Architecture Type:** Layered`,
+              ai_guide: `# AI Repository Guide\n\n## Summary\n**${repoName}** is a ${detectedLanguage} repository with ${fileItems.length} files and ${totalLines.toLocaleString()} lines of code.\n\n## Technology Stack\n- **Language:** ${detectedLanguage}\n- **Modules:** ${moduleNames.length > 0 ? moduleNames.join(", ") : "Not detected"}\n- **File Types:** ${extensions.join(", ")}\n\n## Repository Structure\n${dirs.slice(0, 8).map(d => `- \`${d}/\``).join("\n")}\n\n## How to Get Started\n1. Clone the repository\n2. Review the setup instructions above\n3. Explore the key directories listed above\n4. Run the application locally\n\n## AI Insights\n- **Complexity:** Medium\n- **Maintainability Score:** 65/100\n- **Architecture Type:** ${realAnalysis.type}`,
             }
           })(),
           security: [],
