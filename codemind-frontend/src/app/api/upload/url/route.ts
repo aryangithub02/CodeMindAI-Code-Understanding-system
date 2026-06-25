@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
+import { after } from "next/server"
 import { repositories, fileTrees, fileContents, analyses, onboardingPlans, saveCache } from "../../data"
 import type { RepositoryTreeNode } from "@/types"
+
+export const maxDuration = 60;
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || ""
 const GITHUB_HEADERS: Record<string, string> = {
@@ -174,8 +177,8 @@ export async function POST(req: Request) {
     repositories.push(newRepo)
     saveCache()
 
-    // Fetch repo data asynchronously
-    ;(async () => {
+    // Fetch repo data synchronously to avoid Vercel killing background tasks
+    await (async () => {
       try {
         // Get default branch
         const repoRes = await fetch(`https://api.github.com/repos/${owner}/${repo}`, { headers: GITHUB_HEADERS })
@@ -410,7 +413,8 @@ export async function POST(req: Request) {
       }
     })()
 
-    return NextResponse.json(newRepo)
+    const updatedRepo = repositories.find(r => r.id === repoId) || newRepo
+    return NextResponse.json(updatedRepo)
   } catch (error) {
     return NextResponse.json({ error: "Failed to connect repository via URL" }, { status: 500 })
   }

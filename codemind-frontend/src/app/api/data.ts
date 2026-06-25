@@ -1,8 +1,9 @@
 import fs from "fs"
 import path from "path"
+import os from "os"
 import type { Repository, AnalysisResult, DashboardStats, RepositoryTreeNode, OnboardingPlan } from "@/types"
 
-const CACHE_DIR = path.join(process.cwd(), ".data-cache")
+const CACHE_DIR = path.join(os.tmpdir(), "codemind-data-cache")
 const CACHE_FILE = path.join(CACHE_DIR, "api-data.json")
 
 interface DataCache {

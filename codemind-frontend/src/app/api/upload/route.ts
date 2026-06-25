@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server"
+import { after } from "next/server"
 import { repositories, fileTrees, fileContents, analyses, onboardingPlans, saveCache } from "../data"
+
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
   try {
@@ -29,33 +32,13 @@ export async function POST(req: Request) {
     repositories.push(newRepo)
     saveCache()
 
-    // Simulate async progress transition through analysis stages
-    const stages = [
-      "cloning",
-      "scanning",
-      "parsing",
-      "embedding",
-      "graph_building",
-      "complete"
-    ] as const
+    // Process immediately to avoid Vercel killing background tasks
+    const repo = repositories.find(r => r.id === repoId)
+    if (repo) {
+      repo.status = "complete"
+      repo.updatedAt = new Date().toISOString()
 
-    let currentStageIndex = 0
-
-    const interval = setInterval(() => {
-      const repo = repositories.find(r => r.id === repoId)
-      if (!repo) {
-        clearInterval(interval)
-        return
-      }
-
-      if (currentStageIndex < stages.length) {
-        const nextStatus = stages[currentStageIndex]
-        repo.status = nextStatus
-        repo.updatedAt = new Date().toISOString()
-        currentStageIndex++
-
-        if (nextStatus === "complete") {
-          // Add generated details for this repo when complete
+      // Add generated details for this repo when complete
           fileTrees[repoId] = [
             { name: "src", type: "directory", path: "src", children: [
               { name: "index.ts", type: "file", path: "src/index.ts" },
@@ -124,15 +107,9 @@ export async function POST(req: Request) {
             dataFlow: {
               routes: [],
               flow: ["index.ts invokes utils.ts add function"],
-              sequenceDiagram: `sequenceDiagram
-  participant Index as index.ts
-  participant Utils as utils.ts
-  Index->>+Utils: add(a, b)
-  Utils-->>-Index: result`,
-              flowDiagram: `flowchart LR
-  Index[index.ts] --> Utils[utils.ts]`,
-              architectureDiagram: `graph TD
-  Index[index.ts] --> Utils[utils.ts]`
+              sequenceDiagram: `sequenceDiagram\n  participant Index as index.ts\n  participant Utils as utils.ts\n  Index->>+Utils: add(a, b)\n  Utils-->>-Index: result`,
+              flowDiagram: `flowchart LR\n  Index[index.ts] --> Utils[utils.ts]`,
+              architectureDiagram: `graph TD\n  Index[index.ts] --> Utils[utils.ts]`
             },
             documentation: {
               overview: `# Repository Overview\n\n**${repoName}**\n\n## Technology Stack\n- **Language:** ${repo.language}\n- **Framework:** ${repo.framework || "Unknown"}\n- **Total Files:** ${repo.totalFiles}\n- **Total Lines:** ${repo.totalLines.toLocaleString()}\n\n## Repository Statistics\n\n| Metric | Value |\n|--------|-------|\n| Total Files | ${repo.totalFiles} |\n| Total Lines | ${repo.totalLines.toLocaleString()} |\n| Language | ${repo.language} |\n| Status | ${repo.status} |`,
@@ -167,12 +144,7 @@ export async function POST(req: Request) {
             ]
           }
           saveCache()
-          clearInterval(interval)
-        }
-      } else {
-        clearInterval(interval)
-      }
-    }, 1500)
+    }
 
     return NextResponse.json(newRepo)
   } catch (error) {
