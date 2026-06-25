@@ -251,6 +251,7 @@ export async function POST(req: Request) {
             const moduleDeps = realAnalysis.edges.map(e => `  ${realAnalysis.nodes.find(n => n.id === e.source)?.label || e.source} --> ${realAnalysis.nodes.find(n => n.id === e.target)?.label || e.target}`).join("\n")
             const archMermaid = moduleDeps ? `\`\`\`mermaid\ngraph TD\n${moduleDeps}\n\`\`\`` : ""
             const flowMermaid = `\`\`\`mermaid\nflowchart LR\n  A[${repoName}] --> B[${detectedLanguage}]\n  B --> C[${fileItems.length} files]\n${realAnalysis.modules.slice(0, 5).map(m => `  B --> ${m.name.replace(/\s+/g, "_")}[${m.name}]`).join("\n")}\n\`\`\``
+            const fileList = contentsToFetch.map(f => f.path)
             const extList = [...new Set(fileList.map(f => f.includes(".") ? f.split(".").pop()!.toLowerCase() : "").filter(Boolean))].map(e => `- \`.${e}\``).join("\n")
             const fileListStr = contentsToFetch.slice(0, 20).map(f => `- \`${f.path}\``).join("\n")
             const moduleList = moduleNames.map(m => `- **${m}**`).join("\n")

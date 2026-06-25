@@ -110,6 +110,38 @@ const LAYER_ORDER = [
 ];
 
 function getLayoutedElements(nodes: Node[], edges: Edge[], direction = "LR", viewMode = "module") {
+  if (viewMode !== "layer") {
+    // Lay out nodes dynamically using Dagre based on connections/edges
+    const dagreGraph = new dagre.graphlib.Graph()
+    dagreGraph.setDefaultEdgeLabel(() => ({}))
+    dagreGraph.setGraph({ rankdir: direction, nodesep: 60, ranksep: 100 })
+
+    nodes.forEach((node) => {
+      dagreGraph.setNode(node.id, { width: NODE_WIDTH, height: NODE_HEIGHT })
+    })
+
+    edges.forEach((edge) => {
+      dagreGraph.setEdge(edge.source, edge.target)
+    })
+
+    dagre.layout(dagreGraph)
+
+    return {
+      nodes: nodes.map((node) => {
+        const nodeWithPosition = dagreGraph.node(node.id)
+        if (!nodeWithPosition) return node
+        return {
+          ...node,
+          position: {
+            x: nodeWithPosition.x - NODE_WIDTH / 2,
+            y: nodeWithPosition.y - NODE_HEIGHT / 2,
+          },
+        }
+      }),
+      edges,
+    }
+  }
+
   const isLayer = viewMode === "layer";
 
   // Custom grid-based layering layout to prevent overflow on repos with large numbers of modules
@@ -483,7 +515,7 @@ function ArchitectureFlowInner() {
           opacity: isSelected ? 1 : selectedModule ? 0.1 : 0.4,
         },
         markerEnd: { type: MarkerType.ArrowClosed, color: EDGE_COLORS[e.relation] || "#475569" },
-        animated: false, // Stopped edge flow line animations (blinking)
+        animated: viewMode === "flow" || isSelected, // Enabled active flow/dependency line animations
         labelStyle: { fontSize: 10, fill: "#94A3B8", fontWeight: 'bold' },
         labelBgStyle: { fill: "#1E293B", stroke: "#334155", fillOpacity: 0.8 },
       }

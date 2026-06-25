@@ -29,7 +29,7 @@ import {
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { repositoryService } from "@/services/api"
+import { repositoryService, chatService } from "@/services/api"
 import { CodeViewer } from "@/components/code-viewer"
 import ReactMarkdown from "react-markdown"
 
@@ -443,6 +443,20 @@ export default function ChatPage() {
   const chatMutation = useMutation({
     mutationFn: async ({ messageText, history }: { messageText: string; history: any[] }) => {
       const compressedContext = analysisResult ? compressCodebaseContext(analysisResult) : undefined
+
+      if (settings.openRouterKey) {
+        try {
+          return await chatService.clientSideChat(
+            messageText,
+            settings.openRouterKey,
+            compressedContext,
+            history,
+            tab
+          )
+        } catch (e) {
+          console.warn("Client-side OpenRouter stream failed, falling back to server:", e)
+        }
+      }
 
       const response = await fetch("/api/chat", {
         method: "POST",
