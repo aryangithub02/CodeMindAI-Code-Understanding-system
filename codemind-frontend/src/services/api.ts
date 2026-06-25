@@ -5,6 +5,7 @@ import { generateBuildPlan } from "@/app/api/documentation/generate-build-plan"
 import { analyzeArchitecture } from "@/app/api/architecture/architecture-analyzer"
 import { generateDocumentation } from "@/app/api/documentation/generate-documentation"
 import { generateOnboardingPlan } from "@/app/api/onboarding/generate-onboarding"
+import { extractDataFlow } from "@/app/api/dataflow/extract-dataflow"
 import type {
   Repository,
   AnalysisResult,
@@ -133,6 +134,136 @@ async function getAllDBRepos(): Promise<LocalRepoBundle[]> {
   } catch (e) {
     console.error("Failed to list from IndexedDB:", e)
     return []
+  }
+}
+
+async function ensureLocalRepoBundle(id: string): Promise<LocalRepoBundle | null> {
+  const local = await getDBRepo(id)
+  if (local && local.analysis && local.analysis.architecture && local.analysis.dataFlow) {
+    return local
+  }
+
+  // Fallback to fetch from server or reconstruct
+  let repo: Repository | null = null
+  let tree: RepositoryTreeNode[] = []
+  let contents: Record<string, string> = {}
+
+  try {
+    if (local && local.repository) {
+      repo = local.repository
+    } else {
+      const { data } = await api.get(`/api/repository/${id}`)
+      repo = data
+    }
+
+    if (local && local.fileTree && local.fileTree.length > 0) {
+      tree = local.fileTree
+    } else {
+      const { data } = await api.get(`/api/repository/${id}/tree`)
+      tree = data
+    }
+
+    if (local && local.fileContents && Object.keys(local.fileContents).length > 0) {
+      contents = local.fileContents
+    }
+  } catch (e) {
+    console.warn(`Could not load basic repository details for ${id} from server:`, e)
+    if (local && local.repository && local.fileTree) {
+      repo = local.repository
+      tree = local.fileTree
+    }
+  }
+
+  if (!repo) {
+    if (id === "repo-1") {
+      repo = {
+        id: "repo-1", name: "e-commerce-api", url: "", language: "TypeScript", framework: "NestJS",
+        totalFiles: 42, totalLines: 12450, totalClasses: 18, totalFunctions: 124, status: "complete",
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      }
+    } else if (id === "repo-2") {
+      repo = {
+        id: "repo-2", name: "codemind-backend", url: "", language: "Python", framework: "FastAPI",
+        totalFiles: 28, totalLines: 6720, totalClasses: 12, totalFunctions: 84, status: "complete",
+        createdAt: new Date().toISOString(), updatedAt: new Date().toISOString()
+      }
+    } else {
+      return null
+    }
+  }
+
+  if (!tree || tree.length === 0) {
+    if (id === "repo-1") {
+      tree = [
+        { name: "src", type: "directory", path: "src", children: [
+          { name: "auth", type: "directory", path: "src/auth", children: [
+            { name: "auth.controller.ts", type: "file", path: "src/auth/auth.controller.ts" },
+            { name: "auth.service.ts", type: "file", path: "src/auth/auth.service.ts" },
+          ]}
+        ]}
+      ]
+    } else if (id === "repo-2") {
+      tree = [
+        { name: "app", type: "directory", path: "app", children: [
+          { name: "main.py", type: "file", path: "app/main.py" }
+        ]}
+      ]
+    } else {
+      return null
+    }
+  }
+
+  try {
+    const realAnalysis = await analyzeArchitecture(tree, contents, repo.name)
+    const graphNodes: { id: string; label: string; type: "file" | "class" | "function" | "module"; filePath?: string }[] = []
+    const graphEdges: { source: string; target: string; relation: string }[] = []
+    
+    for (const node of realAnalysis.nodes) {
+      graphNodes.push({ id: node.id, label: node.label, type: node.type === "entry" ? "file" : "module" })
+    }
+    for (const edge of realAnalysis.edges) {
+      graphEdges.push({ source: edge.source, target: edge.target, relation: edge.relation.toLowerCase() })
+    }
+
+    const dataFlowExtracted = extractDataFlow(tree, contents, repo.name)
+
+    const analysis: AnalysisResult = {
+      repository: repo,
+      architecture: realAnalysis,
+      dependencies: {
+        graph: { nodes: graphNodes, edges: graphEdges },
+        hotspots: [],
+        circularDependencies: [],
+        externalDependencies: realAnalysis.externalAPIs,
+        summary: { filesWithImports: 0, totalImportStatements: 0, uniqueExternalDependencies: realAnalysis.externalAPIs.length },
+      },
+      dataFlow: {
+        routes: dataFlowExtracted.routes,
+        flow: [`${repo.name} — ${tree.length} files analyzed`],
+        sequenceDiagram: `sequenceDiagram\n  participant Dev as Developer\n  participant Repo as ${repo.name}\n  Dev->>+Repo: Analyze\n  Repo-->>-Dev: ${tree.length} files`,
+        flowDiagram: `flowchart LR\n  A[${repo.name}] --> B[${repo.language}]`,
+        architectureDiagram: `graph TD\n  A[${repo.name}] --> B[${repo.language}]`,
+      },
+      documentation: generateDocumentation(repo.name, realAnalysis, tree, contents),
+      security: [],
+      quality: [],
+    }
+
+    const onboardingPlan = generateOnboardingPlan(tree, analysis)
+
+    const bundle: LocalRepoBundle = {
+      repository: repo,
+      fileTree: tree,
+      fileContents: contents,
+      analysis,
+      onboardingPlan,
+    }
+
+    await saveDBRepo(bundle)
+    return bundle
+  } catch (err) {
+    console.error("Failed to build local repository bundle client-side:", err)
+    return null
   }
 }
 
@@ -488,18 +619,28 @@ export const repositoryService = {
   },
 
   async getAnalysis(id: string): Promise<ArchitectureAnalysis> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.architecture) {
-      return local.analysis.architecture
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.architecture) {
+      return bundle.analysis.architecture
     }
     const { data } = await api.get(`/api/architecture/${id}`)
     return data
   },
 
   async getDataFlow(id: string): Promise<AnalysisResult["dataFlow"]> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.dataFlow) {
-      return local.analysis.dataFlow
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.dataFlow) {
+      const extracted = extractDataFlow(bundle.fileTree || [], bundle.fileContents || {}, bundle.repository.name)
+      return {
+        ...bundle.analysis.dataFlow,
+        nodes: extracted.nodes,
+        edges: extracted.edges,
+        flows: extracted.flows,
+        routes: extracted.routes.length > 0 ? extracted.routes : bundle.analysis.dataFlow.routes,
+        metrics: extracted.metrics,
+        bottlenecks: extracted.bottlenecks,
+        mermaidDiagram: extracted.mermaidDiagram,
+      } as any
     }
     const { data } = await api.get(`/api/dataflow/${id}`)
     return data
@@ -508,33 +649,41 @@ export const repositoryService = {
   async getDataFlowAnalysis(id: string): Promise<{
     summary: string; strengths: string[]; weaknesses: string[]; risks: string[]; recommendations: string[]
   }> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis) {
-      const contents = local.fileContents || {}
-      const repoName = local.repository.name
-      
-      const svcCount = Object.keys(contents).filter(p => /service/i.test(p)).length
-      const hasDb = Object.keys(contents).some(p => /database|schema|model/i.test(p))
-      const hasAuth = Object.keys(contents).some(p => /auth|login|token/i.test(p))
-      
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis) {
+      const extracted = extractDataFlow(bundle.fileTree || [], bundle.fileContents || {}, bundle.repository.name)
+      const nodeCount = extracted.nodes.length
+      const edgeCount = extracted.edges.length
+      const svcCount = extracted.nodes.filter(n => n.type === "service").length
+      const extCount = extracted.nodes.filter(n => n.type === "external").length
+      const hasDb = extracted.nodes.some(n => n.type === "database")
+      const hasAuth = extracted.nodes.some(n => /auth|login|token/i.test(n.label))
+
       return {
-        summary: `${repoName} follows a layered request-processing architecture. Requests flow through ${svcCount || 1} service layer(s)${hasDb ? " before reaching persistent storage" : ""}. ${hasAuth ? "Authentication gates most protected routes." : ""}`,
+        summary: `${bundle.repository.name} follows a layered request-processing architecture with ${nodeCount} data flow nodes and ${edgeCount} data flow connections. Requests flow through ${svcCount} service layer(s)${hasDb ? " before reaching persistent storage" : ""}.${hasAuth ? " Authentication gates most protected routes." : ""}`,
         strengths: [
           `${svcCount > 1 ? "Well-separated service layer with clear boundaries" : "Service layer encapsulates business logic"}`,
           hasDb ? "Data persistence layer isolated behind repository abstractions" : "Clear request processing pipeline",
+          extCount > 0 ? `Integrates with ${extCount} external service(s)` : "Self-contained architecture with minimal external coupling",
           "Animated flow visualization shows request movement"
         ],
         weaknesses: [
-          "Limited flow diversity - fewer distinct processing stages",
+          nodeCount < 4 ? "Limited flow diversity — fewer distinct processing stages" : "Some flows may share intermediate processing nodes",
+          extCount === 0 ? "No external API integrations detected — may limit functionality" : "External API calls introduce network latency",
           "Data transformation steps are implicit rather than explicitly documented"
         ],
         risks: [
-          hasAuth ? "Authentication service is a single point of failure for all protected routes" : "No authentication layer detected",
-          hasDb ? "Database is a bottleneck for all operations" : "No persistent storage detected"
+          hasAuth ? "Authentication service is a single point of failure for all protected routes" : "No authentication layer detected — all routes are public",
+          hasDb ? "Database is a bottleneck for all operations" : "No persistent storage detected — data may be lost on restart",
+          ...(extCount > 0 ? [`${extCount} external service(s) create dependency risks — an outage could cascade`] : []),
+          "Flow visualization relies on static analysis — async/event-driven flows may be underdetected"
         ],
         recommendations: [
-          hasDb ? "Add read replicas and caching layer (Redis) to reduce database bottleneck" : "Consider adding persistent storage",
-          "Introduce distributed tracing for production flow monitoring"
+          hasDb ? "Add read replicas and caching layer (Redis) to reduce database bottleneck" : "Consider adding persistent storage for production data",
+          "Introduce distributed tracing (OpenTelemetry) for production flow monitoring",
+          extCount > 0 ? `Add circuit breakers for ${extCount} external service call(s) to prevent cascade failures` : "Implement health checks and retry logic for external dependencies",
+          "Add message queue (Kafka/RabbitMQ) for async flow processing to improve resilience",
+          "Document data transformation contracts between layers for better maintainability"
         ]
       }
     }
@@ -543,69 +692,38 @@ export const repositoryService = {
   },
 
   async getDataFlowJourneys(id: string): Promise<{ journeys: DataFlowJourney[] }> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.dataFlow) {
-      const df = local.analysis.dataFlow
-      if (df.analysis?.flows) {
-        return { journeys: df.analysis.flows }
-      }
-      const journeys: DataFlowJourney[] = (df.flow || []).map((stepText, idx) => ({
-        id: `journey-${idx}`,
-        label: `Flow Step ${idx + 1}`,
-        description: stepText,
-        nodeIds: [],
-        edgeIds: [],
-        color: "#3B82F6",
-      }))
-      return { journeys }
-    }
-    const { data } = await api.get(`/api/dataflow/${id}/journeys`)
-    return data
+    const dataFlow = await this.getDataFlow(id)
+    return { journeys: (dataFlow as any).flows || [] }
   },
 
   async getDataFlowMetrics(id: string): Promise<{ metrics: FlowMetrics; bottlenecks: FlowBottleneck[] }> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.dataFlow) {
-      const df = local.analysis.dataFlow
-      return {
-        metrics: {
-          totalFlows: df.metrics?.totalFlows ?? 0,
-          requestFlows: df.metrics?.requestFlows ?? 0,
-          databaseFlows: df.metrics?.databaseFlows ?? 0,
-          externalAPIs: df.metrics?.externalAPIs ?? 0,
-          bottlenecks: df.metrics?.bottlenecks ?? 0,
-          riskScore: df.metrics?.riskScore ?? "Low",
-        },
-        bottlenecks: df.bottlenecks ?? [],
-      }
-    }
-    const flow = await this.getDataFlow(id)
+    const dataFlow = await this.getDataFlow(id)
     return {
-      metrics: {
-        totalFlows: flow.metrics?.totalFlows ?? 0,
-        requestFlows: flow.metrics?.requestFlows ?? 0,
-        databaseFlows: flow.metrics?.databaseFlows ?? 0,
-        externalAPIs: flow.metrics?.externalAPIs ?? 0,
-        bottlenecks: flow.metrics?.bottlenecks ?? 0,
-        riskScore: flow.metrics?.riskScore ?? "Low",
+      metrics: dataFlow.metrics || {
+        totalFlows: 0,
+        requestFlows: 0,
+        databaseFlows: 0,
+        externalAPIs: 0,
+        bottlenecks: 0,
+        riskScore: "Low",
       },
-      bottlenecks: flow.bottlenecks ?? [],
+      bottlenecks: dataFlow.bottlenecks || [],
     }
   },
 
   async getDocumentation(id: string): Promise<AnalysisResult["documentation"]> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.documentation) {
-      return local.analysis.documentation
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.documentation) {
+      return bundle.analysis.documentation
     }
     const { data } = await api.get(`/api/documentation/${id}`)
     return data
   },
 
   async getOnboarding(id: string): Promise<OnboardingPlan> {
-    const local = await getDBRepo(id)
-    if (local && local.onboardingPlan) {
-      return local.onboardingPlan
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.onboardingPlan) {
+      return bundle.onboardingPlan
     }
     const { data } = await api.get(`/api/onboarding/${id}`)
     return data
@@ -669,9 +787,9 @@ export const repositoryService = {
   },
 
   async getArchitectureInsights(id: string): Promise<ArchitectureInsightResponse> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.architecture) {
-      const arch = local.analysis.architecture
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.architecture) {
+      const arch = bundle.analysis.architecture
       const strengths = arch.insights?.filter((i: any) => i.type === "strength").map((i: any) => i.description) || []
       const weaknesses = arch.insights?.filter((i: any) => i.type === "weakness").map((i: any) => i.description) || []
       const risks = arch.insights?.filter((i: any) => i.type === "risk").map((i: any) => i.description) || []
@@ -692,11 +810,11 @@ export const repositoryService = {
   },
 
   async getArchitectureGraph(id: string): Promise<ArchitectureGraphResponse> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.architecture) {
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.architecture) {
       return {
-        nodes: local.analysis.architecture.nodes || [],
-        edges: local.analysis.architecture.edges || [],
+        nodes: bundle.analysis.architecture.nodes || [],
+        edges: bundle.analysis.architecture.edges || [],
       }
     }
     const { data } = await api.get(`/api/architecture/${id}/graph`)
@@ -704,18 +822,18 @@ export const repositoryService = {
   },
 
   async getArchitectureMetrics(id: string): Promise<ArchitectureMetrics> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.architecture) {
-      return local.analysis.architecture.metrics
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.architecture) {
+      return bundle.analysis.architecture.metrics
     }
     const { data } = await api.get(`/api/architecture/${id}/metrics`)
     return data
   },
 
   async getDocumentationSections(id: string): Promise<DocumentationSection[]> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.documentation) {
-      const doc = local.analysis.documentation
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.documentation) {
+      const doc = bundle.analysis.documentation
       const metadataMap: Record<string, { label: string, description: string, icon: string, category: string, complexity: "Low" | "Medium" | "High" | "Critical" }> = {
         overview: { label: "Repository Overview", description: "Project summary, tech stack, statistics", icon: "BookOpen", category: "Overview", complexity: "Low" },
         architecture: { label: "Architecture Docs", description: "Patterns, layers, modules, diagrams", icon: "Cpu", category: "Architecture", complexity: "High" },
@@ -747,9 +865,9 @@ export const repositoryService = {
   },
 
   async getDocumentationSection(id: string, sectionId: string): Promise<string> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.documentation) {
-      const doc = local.analysis.documentation as unknown as Record<string, string>
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.documentation) {
+      const doc = bundle.analysis.documentation as unknown as Record<string, string>
       if (doc[sectionId] !== undefined) {
         return doc[sectionId]
       }
@@ -759,9 +877,9 @@ export const repositoryService = {
   },
 
   async getAIDocumentation(id: string): Promise<AIDocumentationContent> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.documentation) {
-      const doc = local.analysis.documentation
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.documentation) {
+      const doc = bundle.analysis.documentation
       return {
         summary: doc.ai_guide || doc.overview || "AI generated guide based on local repository context.",
         architecture: doc.architecture || "Architecture details from local repository context.",
@@ -774,9 +892,9 @@ export const repositoryService = {
   },
 
   async getBuildFromScratch(id: string): Promise<BuildFromScratchPlan> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.architecture) {
-      return generateBuildPlan(local.repository.name, local.analysis.architecture, local.fileTree || [])
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.architecture) {
+      return generateBuildPlan(bundle.repository.name, bundle.analysis.architecture, bundle.fileTree || [])
     }
     const { data } = await api.get(`/api/documentation/${id}/build-from-scratch`)
     return data
@@ -787,9 +905,9 @@ export const repositoryService = {
     format: string,
     sections?: string[]
   ): Promise<Blob> {
-    const local = await getDBRepo(id)
-    if (local && local.analysis && local.analysis.documentation) {
-      const doc = local.analysis.documentation as unknown as Record<string, string>
+    const bundle = await ensureLocalRepoBundle(id)
+    if (bundle && bundle.analysis && bundle.analysis.documentation) {
+      const doc = bundle.analysis.documentation as unknown as Record<string, string>
       const targetSections = sections && sections.length > 0 ? sections : Object.keys(doc)
       let combinedContent = ""
       for (const sectionId of targetSections) {
@@ -805,7 +923,7 @@ export const repositoryService = {
           <!DOCTYPE html>
           <html>
           <head>
-            <title>${local.repository.name} Documentation</title>
+            <title>${bundle.repository.name} Documentation</title>
             <style>
               body { font-family: sans-serif; line-height: 1.6; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #333; }
               pre { background: #f4f4f4; padding: 15px; border-radius: 5px; overflow-x: auto; }
