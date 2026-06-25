@@ -50,28 +50,43 @@ interface LocalRepoBundle {
   onboardingPlan: OnboardingPlan
 }
 
+const MEMORY_REPO_CACHE: Record<string, LocalRepoBundle> = {}
+
 function getLocalRepos(): Record<string, LocalRepoBundle> {
-  if (typeof window === "undefined") return {}
+  const memRepos = { ...MEMORY_REPO_CACHE }
+  if (typeof window === "undefined") return memRepos
   try {
     const raw = localStorage.getItem(LOCAL_STORAGE_KEY)
-    return raw ? JSON.parse(raw) : {}
+    const lsRepos = raw ? JSON.parse(raw) : {}
+    return { ...lsRepos, ...memRepos }
   } catch {
-    return {}
+    return memRepos
   }
 }
 
 function saveLocalRepo(id: string, bundle: LocalRepoBundle) {
+  // Always save to memory cache (full size with fileContents)
+  MEMORY_REPO_CACHE[id] = bundle
+
   if (typeof window === "undefined") return
   try {
+    // Save to localStorage without large fileContents to stay under quota
+    const prunedBundle = {
+      ...bundle,
+      fileContents: {}
+    }
     const repos = getLocalRepos()
-    repos[id] = bundle
+    repos[id] = prunedBundle
     localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(repos))
   } catch (e) {
-    console.error("Failed to save repo to local storage:", e)
+    console.warn("Failed to save pruned repo to localStorage (likely quota limit), keeping in memory cache:", e)
   }
 }
 
 function deleteLocalRepo(id: string) {
+  if (MEMORY_REPO_CACHE[id]) {
+    delete MEMORY_REPO_CACHE[id]
+  }
   if (typeof window === "undefined") return
   try {
     const repos = getLocalRepos()
