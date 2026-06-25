@@ -146,7 +146,14 @@ export async function POST(req: Request) {
           saveCache()
     }
 
-    return NextResponse.json(newRepo)
+    const updatedRepo = repositories.find(r => r.id === repoId) || newRepo
+    return NextResponse.json({
+      repository: updatedRepo,
+      fileTree: fileTrees[repoId] || [],
+      fileContents: fileContents[repoId] || {},
+      analysis: analyses[repoId] || null,
+      onboardingPlan: onboardingPlans[repoId] || null
+    })
   } catch (error) {
     return NextResponse.json({ error: "Failed to upload repository file" }, { status: 500 })
   }

@@ -1013,7 +1013,7 @@ function ArchitectureFlowInner() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2">
                 <div className="h-64 w-full">
-                  <ResponsiveContainer width="100%" height={256}>
+                  <ResponsiveContainer width="100%" height={256} minWidth={0} minHeight={0}>
                     <BarChart data={metricsChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                       <XAxis dataKey="name" stroke="#64748B" fontSize={11} />

@@ -414,7 +414,13 @@ export async function POST(req: Request) {
     })()
 
     const updatedRepo = repositories.find(r => r.id === repoId) || newRepo
-    return NextResponse.json(updatedRepo)
+    return NextResponse.json({
+      repository: updatedRepo,
+      fileTree: fileTrees[repoId] || [],
+      fileContents: fileContents[repoId] || {},
+      analysis: analyses[repoId] || null,
+      onboardingPlan: onboardingPlans[repoId] || null
+    })
   } catch (error) {
     return NextResponse.json({ error: "Failed to connect repository via URL" }, { status: 500 })
   }

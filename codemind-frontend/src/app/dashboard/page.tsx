@@ -223,7 +223,7 @@ export default function DashboardPage() {
                     ))}
                   </div>
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <BarChart data={repoGrowth}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#1E293B" />
                       <XAxis dataKey="month" stroke="#64748B" fontSize={12} />
@@ -253,7 +253,7 @@ export default function DashboardPage() {
                 {isLoading ? (
                   <Skeleton className="w-44 h-44 rounded-full" />
                 ) : (
-                  <ResponsiveContainer width="100%" height="100%">
+                  <ResponsiveContainer width="100%" height="100%" minWidth={0} minHeight={0}>
                     <PieChart>
                       <Pie
                         data={languageDistribution.length > 0 ? languageDistribution : [{ name: "No data", value: 1, color: "#1E293B" }]}
