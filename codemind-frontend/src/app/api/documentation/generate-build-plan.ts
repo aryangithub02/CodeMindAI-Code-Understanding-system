@@ -84,7 +84,7 @@ export function generateBuildPlan(
   const est = baseEstimate(files.length, arch.modules.length)
   const dbConns = arch.databaseConnections
   const externalApis = arch.externalAPIs
-  const hasFrontend = arch.modules.some((m) => m.type === "frontend") || (repoName && (repoName.toLowerCase().includes("frontend") || repoName.toLowerCase().includes("client")))
+  const hasFrontend = arch.modules.some((m) => m.type === "frontend") || !!(repoName && (repoName.toLowerCase().includes("frontend") || repoName.toLowerCase().includes("client")))
   const hasAuth = arch.modules.some((m) => /auth/i.test(m.name))
   const isMl = /ml|model|train|predict/i.test(arch.summary) || arch.modules.some((m) => /ml|model|train/i.test(m.name))
 
